@@ -26,7 +26,7 @@ library(stringr)
 ```
 
 ```{r}
-imputed <- read_csv(file = "imputed_fecundity.csv")
+imputed <- read_csv(file = "data/imputed_fecundity.csv")
 
 imputed_long <- imputed %>%
   dplyr::select(Species, Genus, family_molecules, GrowthForm_CTD, fecundity, Colony_fecundity, IndoPacific_fecundity) %>%
@@ -262,11 +262,6 @@ genus_final_plot <- (legend_plot / (g1 | g2 | g3)) +  # Legend on top, plots sid
 
 # Display the final plot
 genus_final_plot
-
-ggsave(filename = "../methods/plots/genus_fecundity.pdf", 
-       plot = genus_final_plot, 
-       width = 15, height = 10, units = "in")
-
 ```
 
 ```{r}
@@ -321,9 +316,5 @@ all <- ggplot(fecundity_data, aes(x = Genus_Mean, y = Fecundity_Value, color = D
     labels = c("FALSE" = "Less than Genus Mean", "TRUE" = "Greater than Genus Mean")  # Update labels
   ) +
   scale_shape_manual(values = c("Genus Mean Value" = 23))  # Assign square shape for mean in legend
-
-ggsave(filename = "../methods/plots/GenusSpecies_fecundity_all.pdf", 
-       plot = all, 
-       width = 20, height = 10, units = "in")
 
 ```
