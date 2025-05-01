@@ -115,7 +115,7 @@ imputed$fecundity <- (imputed$Polyps_per_area * imputed$Polyp_fecundity)
 #colony.fecundity
 imputed$Colony_fecundity <- (imputed$fecundity * imputed$Colony_area)
 
-Indo_Pacific <- readRDS(file="../R_code_litreview_sem12024/Indo_Pacific_data.rds")
+Indo_Pacific <- readRDS(file="data/Indo_Pacific_data.rds")
 imputed$coralcover <- (imputed$MeanPCcover * (sum(Indo_Pacific$area_km2)/0.7))
 
 imputed$IndoPacific_fecundity = (imputed$coralcover * imputed$fecundity *1e10)
