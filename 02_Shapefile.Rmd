@@ -30,7 +30,7 @@ Shapefile Work Through
 ############# Shape File Extractions ###########
 
 # Read the shapefile
-shapefile_path <- "../R_code_litreview_sem12024/meow_ecos.shp"
+shapefile_path <- "data/meow_ecos.shp"
 
 # Read the shapefile
 shapefile_data <- st_read(shapefile_path)
@@ -60,7 +60,7 @@ utm_zone
 
 
 # Full file path to the shapefile
-shapefile_path <- "../R_code_litreview_sem12024/meow_ecos.shp"
+shapefile_path <- "data/meow_ecos.shp"
 
 # Set environment variable to attempt to restore missing .shx file if necessary
 Sys.setenv(SHAPE_RESTORE_SHX = "YES")
@@ -124,7 +124,7 @@ if (!is.null(shapefile_data)) {
   print(ecoregion_area_data)
 
   # Save the processed data to a CSV file
-  write.csv(as.data.frame(ecoregion_area_data), "../R_code_litreview_sem12024/ecoregion_area_data.csv")
+  write.csv(as.data.frame(ecoregion_area_data), "data/ecoregion_area_data.csv")
 
   # Summarize the total area per province
   province_summary <- ecoregion_area_data %>%
@@ -171,7 +171,7 @@ ecoregion_area_data <- shapefile_data_proj %>%
 print(ecoregion_area_data)
 
 # Save the processed data to a CSV file
-write.csv(as.data.frame(ecoregion_area_data), "../R_code_litreview_sem12024/ecoregion_area_data.csv")
+write.csv(as.data.frame(ecoregion_area_data), "data/ecoregion_area_data.csv")
 
 # Summarize the total area per province
 province_summary <- ecoregion_area_data %>%
@@ -194,7 +194,7 @@ ggplot(data = shapefile_data_proj) +
 ############################
 Indo_Pacific_data <- subset(shapefile_data_proj, REALM == "Central Indo-Pacific")
 
-write.csv(as.data.frame(Indo_Pacific_data), "../R_code_litreview_sem12024/indo_pacific_data.csv")
+write.csv(as.data.frame(Indo_Pacific_data), "data/indo_pacific_data.csv")
 
 ggplot(data = Indo_Pacific_data) +
   geom_sf(aes(fill = PROVINCE)) +
@@ -214,9 +214,9 @@ Indo_Pacific <- subset(Indo_Pacific_data, PROVINCE != "Hawaii")
 
 sum(Indo_Pacific$area_km2)
 
-write.csv(Indo_Pacific, file = "../R_code_litreview_sem12024/Indo_pacific.csv")
+write.csv(Indo_Pacific, file = "data/Indo_pacific.csv")
 
-saveRDS(Indo_Pacific, "../R_code_litreview_sem12024//Indo_Pacific_data.rds")
+saveRDS(Indo_Pacific, "data//Indo_Pacific_data.rds")
 
 ggplot(data = Indo_Pacific) +
   geom_sf(aes(fill = REALM)) +
@@ -242,10 +242,10 @@ ecoregion_area_data <- shapefile_data %>%
 print(ecoregion_area_data)
 
 # Save to a new shapefile
-st_write(ecoregion_area_data, "../R_code_litreview_sem12024/new_shapefile.shp")
+st_write(ecoregion_area_data, "data/new_shapefile.shp")
 
 # Save to a CSV file
-write.csv(as.data.frame(ecoregion_area_data), "../R_code_litreview_sem12024/ecoregion_area_data.csv")
+write.csv(as.data.frame(ecoregion_area_data), "data/ecoregion_area_data.csv")
 
 shapefile_data <- shapefile_data %>%
   mutate(area_km2 = st_area(.) / 10^6)  # Convert from m^2 to km^2
@@ -258,11 +258,11 @@ ecoregion_area_data <- shapefile_data %>%
 print(ecoregion_area_data)
 
 # Save the processed data to a CSV file
-write.csv(as.data.frame(ecoregion_area_data), "../R_code_litreview_sem12024/ecoregion_area_data.csv")
+write.csv(as.data.frame(ecoregion_area_data), "data/ecoregion_area_data.csv")
 
 coral_traits$coralcover <- (coral_traits$MeanPCcover * (sum(Indo_Pacific$area_km2)/0.7))
 
-write.csv(as.data.frame(ecoregion_area_data), "../R_code_litreview_sem12024/coraldata_final.csv")
+write.csv(as.data.frame(ecoregion_area_data), "data/coraldata_final.csv")
 ```
 
 
