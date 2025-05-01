@@ -29,7 +29,7 @@ library(cowplot)
 ```
 
 ```{r}
-imputed <- read_csv(file = "imputed_fecundity.csv")
+imputed <- read_csv(file = "data/imputed_fecundity.csv")
 
 imputed_long <- imputed %>%
   dplyr::select(Species, Genus, family_molecules, GrowthForm_CTD, fecundity, Colony_fecundity, IndoPacific_fecundity) %>%
@@ -152,9 +152,6 @@ f1 <- ggplot(fecundity_data, aes(x = Genus, y = Fecundity_Value)) +
     axis.line = element_line(color = "black")
   )
 
-ggsave(filename = "../methods/plots/fecundity_family.pdf", 
-       plot = f1, 
-       width = 20, height = 7, units = "in")
 ```
 
 ```{r,echo=FALSE, message=FALSE, error=FALSE, warning=FALSE, fig.width=15, fig.height=8}
@@ -210,9 +207,6 @@ f2 <- ggplot(colony_data, aes(x = Genus, y = Fecundity_Value)) +
     axis.line = element_line(color = "black")
   )
 
-ggsave(filename = "../methods/plots/colony_fecundity_family.pdf", 
-       plot = f2, 
-       width = 20, height = 7, units = "in")
 ```
 
 ```{r,echo=FALSE, message=FALSE, error=FALSE, warning=FALSE, fig.width=15, fig.height=8}
@@ -267,9 +261,5 @@ f3<- ggplot(indo_pacific_data, aes(x = Genus, y = Fecundity_Value)) +
     plot.background = element_rect(fill = "white"),
     axis.line = element_line(color = "black")
   )
-
-ggsave(filename = "../methods/plots/indopacific_fecundity_family.pdf", 
-       plot = f3, 
-       width = 20, height = 7, units = "in")
 
 ```
