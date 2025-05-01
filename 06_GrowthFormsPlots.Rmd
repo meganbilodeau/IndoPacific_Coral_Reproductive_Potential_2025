@@ -1,0 +1,359 @@
+---
+title: "06_GrowthFormPlots"
+output: html_document
+date: "2025-04-28"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readxl)
+library(dplyr)
+library(tidyverse)
+library(funspace)
+library(missForest)
+library(caret)
+library(RColorBrewer)
+library(ggbiplot)
+library(viridis)
+library(forcats) 
+library(patchwork)
+library(lme4)
+library(ggrepel)
+library(dplyr)
+library(broom)
+library(purrr)
+```
+
+```{r}
+imputed <- read_csv(file = "imputed_fecundity.csv")
+
+imputed_long <- imputed %>%
+  dplyr::select(Species, Genus, family_molecules, GrowthForm_CTD, fecundity, Colony_fecundity, IndoPacific_fecundity) %>%
+  pivot_longer(cols = c(fecundity, Colony_fecundity, IndoPacific_fecundity),
+               names_to = "Fecundity_Type", values_to = "Fecundity_Value")
+
+fecundity_data <- imputed_long %>%
+  filter(Fecundity_Type == "fecundity")
+
+colony_data <- imputed_long %>%
+  filter(Fecundity_Type == "Colony_fecundity")
+
+indo_pacific_data <- imputed_long %>%
+  filter(Fecundity_Type == "IndoPacific_fecundity")
+```
+
+```{r pressure, echo=FALSE}
+# Add Growth Form to the dataset
+imputed <- imputed %>%
+  mutate(GrowthForm = case_when(
+    GrowthForm_CTD %in% c("branching_open", "branching_closed") ~ "Branching",
+    GrowthForm_CTD == "massive" ~ "Massive",
+    GrowthForm_CTD == "digitate" ~ "Digitate",
+    GrowthForm_CTD == "encrusting" ~ "Encrusting",
+    GrowthForm_CTD == "laminar" ~ "Laminar",
+    TRUE ~ "Other" # Any other growth form
+  ))
+```
+
+
+```{r}
+
+
+# (Your starting code adding GrowthForm is correct)
+
+# Fit separate linear models for each GrowthForm
+lm_results <- imputed %>%
+  group_by(GrowthForm) %>%
+  summarise(
+    model = list(lm(IndoPacific_fecundity ~ fecundity, data = cur_data())),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    tidied = map(model, broom::tidy),
+    glanced = map(model, broom::glance)
+  ) %>%
+  unnest(c(tidied, glanced), names_sep = "_")
+
+# Extract R² values
+r2_pvalues <- lm_results %>%
+  filter(tidied_term == "fecundity") %>%
+  dplyr::select(GrowthForm, glanced_r.squared, tidied_p.value)
+
+# Prepare label text for each GrowthForm
+r2_pvalues <- r2_pvalues %>%
+  mutate(
+    label = paste0("R² = ", round(glanced_r.squared, 2))
+  )
+
+# Create the plot
+genus <- ggplot(imputed, aes(x = fecundity, y = IndoPacific_fecundity, color = GrowthForm)) +
+  geom_point(size = 3, alpha = 0.6) +
+  geom_smooth(method = "lm", aes(group = GrowthForm), se = TRUE, show.legend = FALSE) +  # GrowthForm-specific regression lines
+  geom_smooth(method = "lm", aes(group = 1), se = TRUE, color = "black", linetype = "dashed", size = 1) +  # Overall regression line
+  scale_color_manual(values = c("Branching" = "firebrick3", "Massive" = "palegreen3", "Digitate" = "goldenrod3",
+                                "Encrusting" = "steelblue2", "Laminar" = "plum3", "Other" = "slategrey")) +
+  labs(
+    x = expression("Fecundity per " * cm^2),
+    y = expression("Total fecundity across the Indo-Pacific (eggs/" * km^2 * ")"),
+    color = NULL
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.title = element_text(size = 14, face = "bold"),
+    axis.text = element_text(size = 12),
+    legend.title = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 10),
+    panel.grid = element_blank(),
+    panel.border = element_rect(color = "black", fill = NA, size = 1),
+    strip.text = element_text(size = 14, face = "bold")
+  ) +
+  geom_text(
+    data = r2_pvalues,
+    aes(x = Inf, y = -Inf, label = label),
+    inherit.aes = FALSE,
+    hjust = 1.1,
+    vjust = -0.5,
+    size = 4,
+    fontface = "bold"
+  ) +
+  facet_wrap(~GrowthForm)
+
+ggsave(filename = "../methods/plots/genus_fecundity_comparison.pdf", 
+       plot = genus, 
+       width = 20, height = 10, units = "in")
+
+```
+```{r}
+
+imputed_growthform <- imputed %>%
+  mutate(GrowthForm = case_when(
+    GrowthForm_CTD %in% c("branching_open", "branching_closed") ~ "Branching",
+    GrowthForm_CTD == "massive" ~ "Massive",
+    GrowthForm_CTD == "digitate" ~ "Digitate",
+    GrowthForm_CTD == "encrusting" ~ "Encrusting",
+    GrowthForm_CTD == "laminar" ~ "Laminar",
+    TRUE ~ GrowthForm_CTD  # Any other growth form
+  ))
+
+## This is grouping the data in growth form and then adding up the fecundity per cm2 scores for each growth form then ordering from highest to lowest and taking the top 6 growth forms 
+top10_fecundity <- imputed_growthform %>%
+  group_by(GrowthForm) %>%
+  summarize(Total_Fecundity = sum(fecundity, na.rm = TRUE)) %>%
+  arrange(desc(Total_Fecundity))
+
+top10_fecundity <- imputed_growthform %>%
+  group_by(GrowthForm) %>%
+  summarize(Total_Fecundity = sum(fecundity, na.rm = TRUE)) %>%
+  arrange(desc(Total_Fecundity)) %>%
+  slice(1:5) %>%
+  pull(GrowthForm)
+
+## This is grouping the data in growth form and then adding up the colony fecundity scores for each growth form then ordering from highest to lowest and taking the top 6 growth forms 
+top10_colony <- imputed_growthform %>%
+  group_by(GrowthForm) %>%
+  summarize(Total_Colony_Fecundity = sum(Colony_fecundity, na.rm = TRUE)) %>%
+  arrange(desc(Total_Colony_Fecundity))
+
+top10_colony <- imputed_growthform %>%
+  group_by(GrowthForm) %>%
+  summarize(Total_Colony_Fecundity = sum(Colony_fecundity, na.rm = TRUE)) %>%
+  arrange(desc(Total_Colony_Fecundity)) %>%
+  slice(1:5) %>%
+  pull(GrowthForm)
+
+## This is grouping the data in growth form and then adding up the indopacific fecundity scores for each growth form then ordering from highest to lowest and taking the top 6 growth forms 
+top10_indo_pacific <- imputed_growthform %>%
+  group_by(GrowthForm) %>%
+  summarize(Total_IndoPacific_Fecundity = sum(IndoPacific_fecundity, na.rm = TRUE)) %>%
+  arrange(desc(Total_IndoPacific_Fecundity)) 
+
+top10_indo_pacific <- imputed_growthform %>%
+  group_by(GrowthForm) %>%
+  summarize(Total_IndoPacific_Fecundity = sum(IndoPacific_fecundity, na.rm = TRUE)) %>%
+  arrange(desc(Total_IndoPacific_Fecundity)) %>%
+  slice(1:5) %>%
+  pull(GrowthForm)
+
+# Step 2: Create separate dataframes for each fecundity type, categorizing genera as "Top 6" or "Other"
+fecundity_data <- imputed_growthform %>%
+  mutate(GrowthForm_CTD_Category = ifelse(GrowthForm %in% top10_fecundity, GrowthForm, "Other")) %>%
+  group_by(GrowthForm_CTD_Category) %>%
+  summarize(Value = sum(fecundity, na.rm = TRUE)) %>%
+  mutate(Fecundity_Type = "Fecundity")
+
+# Compute proportions within each Fecundity_Type
+fecundity_data_prop <- fecundity_data %>%
+  mutate(Proportion = Value / sum(Value)) %>%
+  arrange(Proportion)
+
+growth_form_order <- fecundity_data_prop %>%
+  group_by(GrowthForm_CTD_Category) %>%
+  summarise(Total_Proportion = sum(Proportion)) %>%
+  arrange(Total_Proportion)  # Change to descending order
+
+# Apply ordering to the factor
+fecundity_data_prop <- fecundity_data_prop %>%
+  mutate(GrowthForm_CTD_Category = factor(GrowthForm_CTD_Category, levels = growth_form_order$GrowthForm_CTD_Category))
+
+# Plot
+p1 <- ggplot(fecundity_data_prop, aes(x = Fecundity_Type, y = Proportion, fill = GrowthForm_CTD_Category)) +
+  geom_bar(stat = "identity", position = "fill", color = "black") +  # Stacked bars
+  labs(
+    x = NULL,  
+    y = "Proportion of Total Reproductive Potential",
+    fill = "Growth Form"
+  ) +
+ theme(
+    legend.position = "none",  # Hide legend for this plot
+    panel.grid = element_blank(),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.line = element_line(color = "black"),
+    axis.title.y = element_text(size = 14),
+    axis.text.y = element_text(size = 14),
+    axis.text.x = element_text(size = 14),  # Increase x-axis text size
+    axis.title.x = element_text(size = 14, face = "bold"),
+    legend.text = element_text(size = 14),  # Increase legend text size
+    legend.title = element_text(size = 16)  # Increase legend title size
+  ) +
+  annotate("text", x = -Inf, y = Inf, label = "B", hjust = -0.1, vjust = 1.3, size = 8, fontface = "bold")+
+  scale_fill_manual(values = c("Branching" = "firebrick3", "Massive" = "palegreen3", "Digitate" = "goldenrod3",
+                               "Encrusting" = "steelblue2", "Laminar" = "plum3", "Other" = "slategrey")) +  
+  scale_y_continuous(labels = scales::percent) +  # Convert to percentages
+  scale_x_discrete(labels = function(x) {  # Rename x-axis categories
+    ifelse(
+      x == "Fecundity", expression("Fecundity per" ~ cm^2),
+      ifelse(
+        x == "Colony Fecundity", expression("Colony Fecundity"),
+        ifelse(x == "IndoPacific Fecundity", expression("Total Fecundity"), x)
+      )
+    )
+  })
+
+
+colony_data <- imputed_growthform %>%
+  mutate(GrowthForm_CTD_Category = ifelse(GrowthForm %in% top10_colony, GrowthForm, "Other")) %>%
+  group_by(GrowthForm_CTD_Category) %>%
+  summarize(Value = sum(Colony_fecundity, na.rm = TRUE)) %>%
+  mutate(Fecundity_Type = "Colony Fecundity")
+
+# Compute proportions within each Fecundity_Type
+colony_data_prop <- colony_data %>%
+  mutate(Proportion = Value / sum(Value)) %>%
+  arrange(Proportion)
+
+colony_growth_form_order <- colony_data_prop %>%
+  group_by(GrowthForm_CTD_Category) %>%
+  summarise(Total_Proportion = sum(Proportion)) %>%
+  arrange(Total_Proportion)  # Change to descending order
+
+# Apply ordering to the factor
+colony_data_prop <- colony_data_prop %>%
+  mutate(GrowthForm_CTD_Category = factor(GrowthForm_CTD_Category, levels = colony_growth_form_order$GrowthForm_CTD_Category))
+
+# Plot
+p2 <- ggplot(colony_data_prop, aes(x = Fecundity_Type, y = Proportion, fill = GrowthForm_CTD_Category)) +
+  geom_bar(stat = "identity", position = "fill", color = "black") +  # Stacked bars
+  labs(
+    x = NULL,  
+    y = NULL,
+    fill = "Growth Form"
+  ) +
+  theme(
+    legend.position = "top",  # Hide legend for this plot
+    panel.grid = element_blank(),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.line = element_line(color = "black"),
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.line.y = element_blank(),
+    axis.text.x = element_text(size = 14),  # Increase x-axis text size
+    axis.title.x = element_text(size = 14, face = "bold"),
+    legend.text = element_text(size = 14),  # Increase legend text size
+    legend.title = element_text(size = 16)  # Increase legend title size
+  ) +
+  scale_fill_manual(values = c("Branching" = "firebrick3", "Massive" = "palegreen3", "Digitate" = "goldenrod3",
+                               "Encrusting" = "steelblue2", "Laminar" = "plum3", "Other" = "slategrey")) +  
+  scale_y_continuous(labels = scales::percent) +  # Convert to percentages
+  scale_x_discrete(labels = function(x) {  # Rename x-axis categories
+    ifelse(
+      x == "Fecundity", expression("Fecundity per" ~ cm^2),
+      ifelse(
+        x == "Colony Fecundity", expression("Colony Fecundity"),
+        ifelse(x == "IndoPacific Fecundity", expression("Total Fecundity"), x)
+      )
+    )
+  })
+
+
+
+indo_pacific_data <- imputed_growthform %>%
+  mutate(GrowthForm_CTD_Category = ifelse(GrowthForm %in% top10_indo_pacific, GrowthForm, "Other")) %>%
+  group_by(GrowthForm_CTD_Category) %>%
+  summarize(Value = sum(IndoPacific_fecundity, na.rm = TRUE)) %>%
+  mutate(Fecundity_Type = "IndoPacific Fecundity")
+
+# Compute proportions within each Fecundity_Type
+indo_pacific_data_prop <- indo_pacific_data %>%
+  mutate(Proportion = Value / sum(Value)) %>%
+  arrange(Proportion)
+
+indo_pacific_growth_form_order <- indo_pacific_data_prop %>%
+  group_by(GrowthForm_CTD_Category) %>%
+  summarise(Total_Proportion = sum(Proportion)) %>%
+  arrange(Total_Proportion)  # Change to descending order
+
+# Apply ordering to the factor
+indo_pacific_data_prop <- indo_pacific_data_prop %>%
+  mutate(GrowthForm_CTD_Category = factor(GrowthForm_CTD_Category, levels = indo_pacific_growth_form_order$GrowthForm_CTD_Category))
+
+# Plot
+p3 <- ggplot(indo_pacific_data_prop, aes(x = Fecundity_Type, y = Proportion, fill = GrowthForm_CTD_Category)) +
+  geom_bar(stat = "identity", position = "fill", color = "black") +  # Stacked bars
+  labs(
+    x = NULL,  
+    y = NULL,
+    fill = "Growth Form"
+  ) +
+  theme(
+    legend.position = "none",  # Hide legend for this plot
+    panel.grid = element_blank(),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.line = element_line(color = "black"),
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.line.y = element_blank(),
+    axis.text.x = element_text(size = 14),  # Increase x-axis text size
+    axis.title.x = element_text(size = 14, face = "bold"),
+    legend.text = element_text(size = 14),  # Increase legend text size
+    legend.title = element_text(size = 16)  # Increase legend title size
+  ) +
+  scale_fill_manual(values = c("Branching" = "firebrick3", "Massive" = "palegreen3", "Digitate" = "goldenrod3",
+                               "Encrusting" = "steelblue2", "Laminar" = "plum3", "Other" = "slategrey")) +  
+  scale_y_continuous(labels = scales::percent) +  # Convert to percentages
+  scale_x_discrete(labels = function(x) {  # Rename x-axis categories
+    ifelse(
+      x == "Fecundity", expression("Fecundity per" ~ cm^2),
+      ifelse(
+        x == "Colony Fecundity", expression("Colony Fecundity"),
+        ifelse(x == "IndoPacific Fecundity", expression("Total Fecundity"), x)
+      )
+    )
+  })
+
+
+
+# Arrange them side by side
+final_plot <- (p1 | p2 | p3)  # Using `|` for horizontal alignment
+final_plot
+
+ggsave(filename = "../methods/plots/growthform_fecundity.pdf", 
+       plot = final_plot, 
+       width = 20, height = 10, units = "in")
+
+```

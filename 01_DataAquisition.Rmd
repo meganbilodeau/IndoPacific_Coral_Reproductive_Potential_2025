@@ -1,0 +1,222 @@
+---
+title: "01_DataAquisition"
+output: html_document
+date: "2025-04-28"
+---
+Purpose: To filter the data and put together the files for imputation by funspace
+
+Inputs: 
+RData/Input_Files.RData - from Dietzel data 
+coral_popsize.xlsx - from Dietzel supplementary data 
+ctdb_1.1.1_data.csv - downloaded data from coral traits database 
+
+Outputs:
+funspacedata.csv - file with the mean traits of the corals with data in coral traits database matched to the support data from Dietzel
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(readxl)
+library(dplyr)
+library(tidyverse)
+```
+
+############## read in data ################
+
+```{r}
+##load("R_code_litreview_sem12024/R code Dietzel et al/RData/Input_Files.RData")
+##coraldata <- SupportData
+coral <- read.csv("../R_code_litreview_sem12024/coraldata.csv")
+
+file_path <- "../R_code_litreview_sem12024/coral_popsize.xlsx"
+
+# Read the names of all sheets in the Excel file
+sheet_names <- excel_sheets(file_path)
+print(sheet_names)  # Print the names of the sheets
+
+# Read each sheet into a list of data frames
+data_list <- lapply(sheet_names, function(sheet) {
+  read_excel(file_path, sheet = sheet)
+})
+
+# Optionally, name the list elements after the sheet names
+names(data_list) <- sheet_names
+
+# Access individual data frames by sheet name
+species_abundance <- data_list[["Species abundances"]]
+population_sizes <- data_list[["Population sizes"]]
+habitat_maps <- data_list[["Reef habitat maps"]]
+```
+
+############## Combine the data ################
+
+```{r}
+
+coraldata <- merge(coral, population_sizes, by = "Species")
+
+write.csv(coraldata, file = "coraldata_colnumber.csv", row.names = TRUE)
+
+coraltraits <- read.csv("ctdb_1.1.1_data.csv")
+
+coraltraits <- coraltraits %>%
+  rename(Species = specie_name)
+
+coraltraits <- coraltraits %>%
+  dplyr::select(-observation_id, -access, -user_id, -specie_id, -location_id, - latitude, -longitude, -measurement_id, -standard_id, -methodology_name, -methodology_id, -precision, -precision_type, -precision_upper, -replicates, -notes, -trait_class)
+
+coral_traits <- merge(coraltraits, coraldata, by = "Species")
+
+coral_traits <- distinct(coral_traits)
+
+coral_traits <- coral_traits %>%
+  mutate(row_number = row_number())
+
+coral_traits_genus <- coral_traits %>%
+  mutate(Genus = sapply(strsplit(Species, " "), `[`, 1))
+
+```
+
+############## Getting mean values of traits ################
+Reproductive Strategies of Modular Organisms: Comparative Studies of Reef- Building Corals
+V. R. Hall, T. P. Hughes
+Ecology, Vol. 77, No. 3 (Apr., 1996), pp. 950-963 (14 pages)
+https://doi.org/10.2307/2265514
+```{r}
+
+# Separate numeric and string values
+coral_traits$Numeric_Value <- as.numeric(as.character(coral_traits$value))
+coral_traits$String_Value <- ifelse(is.na(coral_traits$Numeric_Value), as.character(coral_traits$value), NA)
+
+write.csv(coral_traits, file = "coral_traits.csv")
+
+# Calculate mean for numeric values
+mean_values <- coral_traits %>%
+  filter(!is.na(Numeric_Value)) %>%
+  group_by(Species, trait_name) %>%
+  summarise(Mean_Value = mean(Numeric_Value))
+
+# Retain string traits
+#string_values <- coral_traits %>%
+#  filter(!is.na(String_Value)) %>%
+#  dplyr::select(Species, trait_name, String_Value)
+
+
+new_row <- data.frame(
+  Species = c("Acropora cytherea", "Acropor digitifera", "Acropora humilis", "Acropora nasuta", "Acropora spathulata", "Goniastrea pectinata", "Goniastrea retiformis"),
+  trait_name = c("Polyp fecundity", "Polyp fecundity", "Polyp fecundity", "Polyp fecundity", "Polyp fecundity", "Polyp fecundity", "Polyp fecundity"),
+  Mean_Value = c(1.023, 11.507, 14.999, 14.074, 9.496, 7.036, 4.966)
+)
+
+
+mean_values <- bind_rows(mean_values, new_row)
+
+mean_values <- mean_values %>%
+  mutate(Mean_Value = as.character(Mean_Value))
+
+# Function to check if a value is numeric
+is_numeric <- function(x) {
+  !is.na(suppressWarnings(as.numeric(x)))
+}
+
+# Filter out rows with string values and select relevant columns
+string_values <- coral_traits %>%
+  filter(!is.na(value) & !is_numeric(value)) %>%
+  dplyr::select(Species, trait_name, value) %>%
+  rename(String_Value = value)
+
+string_values <- distinct(string_values)
+
+
+#Combine the results
+combined_results <- bind_rows(
+  mean_values %>% rename(value = Mean_Value),
+  string_values %>% rename(value = String_Value)
+)
+
+coral_traits <- merge(coral_traits, combined_results, by = c("Species", "trait_name"), all = TRUE)
+
+coral_traits <- coral_traits %>%
+  dplyr::select(-Numeric_Value, -String_Value, -row_number)
+
+```
+
+```{r}
+for_coral_wide <- coral_traits %>%
+  dplyr::select(-location_name, -resource_id, -resource_secondary_id, -value.x, -value_type, -SuscBleach_IUCN, -trait_id, -standard_unit)
+
+for_coral_wide.2 <- distinct(for_coral_wide)
+
+
+# Pivot the data to wide format
+data_wide <- for_coral_wide.2 %>%
+  pivot_wider(names_from = trait_name, values_from = value.y)
+
+names(data_wide) <- gsub(" ", "_", names(data_wide))
+
+####
+
+list_columns <- sapply(data_wide, function(x) any(sapply(x, function(y) is.character(y) && length(y) > 1)))
+
+names(list_columns[list_columns])
+
+data_wide_condensed <- data_wide %>%
+  dplyr::select(-Genus_fossil_stage, -Symbiodinium_clade, -Water_temperature, -Season, -Turbidity, -Plankton_controlled, -Geographical_region, -Symbiodinium_subclade, -Habitat_type, -Wave_exposure, -Direction, -Shaded, -Growth_form_Veron, -Water_depth, -Irradiance, -Year, -Colony_part, -Damage, -'Indo-Pacific_faunal_province', -Month, -Flow_rate, -Fish_predation_controlled, -Fish_association_controlled) 
+
+unnested_data <- data_wide_condensed %>%
+  mutate(across(where(is.list), ~ ifelse(sapply(., length) == 1, unlist(.), .))) %>%
+  unnest(cols = everything(), keep_empty = TRUE)
+
+list_columns <- sapply(unnested_data, is.list)
+
+print(list_columns)
+
+
+# Function to replace NULL with NA
+replace_null_with_na <- function(x) {
+  x[sapply(x, is.null)] <- NA
+  return(x)
+}
+
+# Apply the function to all columns
+data_wide_condensed2 <- unnested_data %>%
+  mutate(across(everything(), replace_null_with_na))
+
+
+# Now convert relevant columns to numeric
+data_wide_condensed2 <- data_wide_condensed2 %>%
+  mutate(Polyp_fecundity = as.numeric(Polyp_fecundity), Polyps_per_area = as.numeric(Polyps_per_area))
+
+data_wide_condensed2 <- data_wide_condensed2 %>%
+  mutate(
+    Polyp_fecundity = as.numeric(replace(Polyp_fecundity, !grepl("^[0-9.]+$", Polyp_fecundity), NA)),
+    Polyps_per_area = as.numeric(replace(Polyps_per_area, !grepl("^[0-9.]+$", Polyps_per_area), NA))
+  )
+
+clean_numeric_column <- function(column) {
+  column <- as.character(column)  # Ensure it's a character vector
+  column[!grepl("^-?\\d+(\\.\\d+)?$", column)] <- NA  # Replace non-numeric values with NA
+  as.numeric(column)  # Convert to numeric
+}
+
+# Apply the cleaning function to relevant columns
+data_wide_condensed2 <- data_wide_condensed2 %>%
+  mutate(
+    Polyp_fecundity = clean_numeric_column(Polyp_fecundity),
+    Polyps_per_area = clean_numeric_column(Polyps_per_area)
+  )
+
+data_wide_condensed2 <- data_wide_condensed2 %>%
+  mutate(pre_fecundity = if_else(is.na(Polyp_fecundity) | is.na(Polyps_per_area), NA_real_, Polyp_fecundity * Polyps_per_area *1e10))
+
+list_columns <- sapply(data_wide_condensed2, is.list)
+
+print(list_columns)
+
+
+area <- data_wide_condensed2%>%
+  filter(!is.na(Colony_area))
+
+write.csv(data_wide_condensed2, file = "../methods/funspacedata.csv", row.names = TRUE)
+
+```

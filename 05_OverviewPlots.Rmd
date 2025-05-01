@@ -1,0 +1,275 @@
+---
+title: "05_OverviewPlots"
+output: html_document
+date: "2025-04-28"
+---
+
+Purpose: To plot the imputed data regarding fecundity at three levels (eggs per area - fecundity, eggs per average colony area - colony_fecundity, eggs total across the indo-pacific area - indo-pacific_fecundity)
+
+Inputs
+imputed_fecundity.csv
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readxl)
+library(dplyr)
+library(tidyverse)
+library(funspace)
+library(missForest)
+library(caret)
+library(RColorBrewer)
+library(ggbiplot)
+library(viridis)
+library(forcats) 
+library(patchwork)
+library(lme4)
+library(ggrepel)
+library(cowplot)
+```
+
+```{r}
+imputed <- read_csv(file = "imputed_fecundity.csv")
+
+imputed_long <- imputed %>%
+  dplyr::select(Species, Genus, family_molecules, GrowthForm_CTD, fecundity, Colony_fecundity, IndoPacific_fecundity) %>%
+  pivot_longer(cols = c(fecundity, Colony_fecundity, IndoPacific_fecundity),
+               names_to = "Fecundity_Type", values_to = "Fecundity_Value")
+
+fecundity_data <- imputed_long %>%
+  filter(Fecundity_Type == "fecundity")
+
+colony_data <- imputed_long %>%
+  filter(Fecundity_Type == "Colony_fecundity")
+
+indo_pacific_data <- imputed_long %>%
+  filter(Fecundity_Type == "IndoPacific_fecundity")
+```
+
+ Supplementary Figure 1 
+```{r}
+#Calculate correlation coefficient and p-value
+correlation_test <- cor.test(imputed$fecundity, imputed$IndoPacific_fecundity, use = "complete.obs")
+
+# Extract the correlation coefficient and p-value
+correlation_coefficient <- correlation_test$estimate
+p_value <- correlation_test$p.value
+
+# Print results
+cat("Correlation Coefficient:", correlation_coefficient, "\n")
+cat("P-value:", p_value, "\n")
+
+imputed <- imputed %>%
+  mutate(GrowthForm = case_when(
+    GrowthForm_CTD %in% c("branching_open", "branching_closed") ~ "Branching",
+    GrowthForm_CTD == "massive" ~ "Massive",
+    GrowthForm_CTD == "digitate" ~ "Digitate",
+    GrowthForm_CTD == "encrusting" ~ "Encrusting",
+    GrowthForm_CTD == "laminar" ~ "Laminar",
+    TRUE ~ "Other" # Any other growth form
+  ))
+
+# Plot with separate colors for genus but a single correlation line
+ggplot(imputed, aes(x = fecundity, y = IndoPacific_fecundity)) +
+  geom_point(aes(fill = GrowthForm), size = 3, shape = 21, color = "black", alpha = 0.7) +
+  geom_smooth(method = "lm", se = FALSE, color = "black", aes(group = 1)) +
+  labs(
+    x = expression("Fecundity per " * cm^2),
+    y = "Indo-Pacific Fecundity",
+    fill = "Growth Form"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12),                                     
+    panel.grid = element_blank(),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.line = element_line(color = "black")
+  )
+```
+
+```{r,echo=FALSE, message=FALSE, error=FALSE, warning=FALSE, fig.width=15, fig.height=8}
+
+# Prepare data for plotting
+plot_data <- fecundity_data %>%
+  group_by(family_molecules, Genus) %>%
+  summarise(mean_fecundity = median(Fecundity_Value, na.rm = TRUE), .groups = "drop") %>%
+  arrange(family_molecules, desc(mean_fecundity)) %>%
+  distinct(Genus, .keep_all = TRUE)  # Ensure unique Genus values
+
+# Create shading data for family molecules
+shading_data <- plot_data %>%
+  group_by(family_molecules) %>%
+  summarise(
+    xmin = min(as.numeric(Genus)),
+    xmax = max(as.numeric(Genus)),
+    .groups = "drop"
+  )
+
+# Reorder Fecundity_Type for grouping
+fecundity_data <- fecundity_data %>%
+  mutate(
+    Genus = factor(Genus, levels = unique(plot_data$Genus)),
+    family_molecules = factor(family_molecules, levels = unique(plot_data$family_molecules))
+  )
+
+# Define colors for family molecules globally
+num_families <- nlevels(fecundity_data$family_molecules)
+family_colors <- colorRampPalette(brewer.pal(min(11, num_families), "Spectral"))(num_families)
+names(family_colors) <- levels(fecundity_data$family_molecules)
+
+# Save the assigned colors to reuse in another graph
+family_colors_vector <- family_colors  # This will retain the names and values
+
+f1 <- ggplot(fecundity_data, aes(x = Genus, y = Fecundity_Value)) +
+  # Add shaded background rectangles
+  geom_rect(data = shading_data, aes(xmin = xmin - 0.3, xmax = xmax + 0.3, ymin = 0, ymax = 5000, fill = family_molecules),
+            inherit.aes = FALSE, alpha = 0.2) +
+  # Add boxplot
+  geom_boxplot(aes(fill = family_molecules), alpha = 0.7, outlier.shape = NA) +
+  # Add jittered points
+  geom_jitter(aes(fill = family_molecules), shape = 21, size = 2, width = 0.2) +
+  scale_fill_manual(values = family_colors_vector) +
+  annotate("text", x = -Inf, y = Inf, label = "A", hjust = -0.5, vjust = 1, size = 10, fontface = "bold") +  # Larger text annotation
+  labs(
+    x = NULL,
+    y = expression("Log Fecundity (eggs per " * cm^2 * ")"),
+    fill = "Family Molecule"
+  ) +
+  scale_y_log10() +
+  theme(
+    legend.position = "top",
+    legend.text = element_text(size = 14),        # Increase legend text size
+    legend.title = element_text(size = 16),  # Increase legend title size
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 14),  # Larger x-axis labels
+    axis.text.y = element_text(size = 14),        # Larger y-axis labels
+    axis.title = element_text(size = 16),  # Larger axis titles
+    plot.title = element_text(size = 16, hjust = 0.5), # Larger plot title
+    panel.grid = element_blank(),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.line = element_line(color = "black")
+  )
+
+ggsave(filename = "../methods/plots/fecundity_family.pdf", 
+       plot = f1, 
+       width = 20, height = 7, units = "in")
+```
+
+```{r,echo=FALSE, message=FALSE, error=FALSE, warning=FALSE, fig.width=15, fig.height=8}
+
+# Prepare data for plotting
+colony_plot_data <- colony_data %>%
+  group_by(family_molecules, Genus) %>%
+  summarise(mean_fecundity = median(Fecundity_Value, na.rm = TRUE), .groups = "drop") %>%
+  arrange(family_molecules, desc(mean_fecundity)) %>%
+  distinct(Genus, .keep_all = TRUE)  # Ensure unique Genus values
+
+# Create shading data for family molecules
+shading_data <- colony_plot_data %>%
+  group_by(family_molecules) %>%
+  summarise(
+    xmin = min(as.numeric(Genus)),
+    xmax = max(as.numeric(Genus)),
+    .groups = "drop"
+  )
+
+# Reorder Fecundity_Type for grouping
+colony_data <- colony_data %>%
+  mutate(
+    Genus = factor(Genus, levels = unique(colony_plot_data$Genus)),
+    family_molecules = factor(family_molecules, levels = unique(colony_plot_data$family_molecules))
+  )
+
+f2 <- ggplot(colony_data, aes(x = Genus, y = Fecundity_Value)) +
+  # Add shaded background rectangles
+  geom_rect(data = shading_data, aes(xmin = xmin - 0.3, xmax = xmax + 0.3, ymin = 0, ymax = 2e+06, fill = family_molecules),
+            inherit.aes = FALSE, alpha = 0.2) +
+  # Add boxplot
+  geom_boxplot(aes(fill = family_molecules), alpha = 0.7, outlier.shape = NA) +
+  # Add jittered points
+  geom_jitter(aes(fill = family_molecules), shape = 21, size = 2, width = 0.2) +
+  scale_fill_manual(values = family_colors_vector) +
+  labs(
+    x = NULL,
+    y = expression("Log mean colony fecundity"),
+    fill = "Family Molecule"
+  ) +
+  annotate("text", x = -Inf, y = Inf, label = "B", hjust = -0.5, vjust = 1, size = 8, fontface = "bold")+
+  scale_y_log10()+
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 14),  # Larger x-axis labels
+    axis.text.y = element_text(size = 14),        # Larger y-axis labels
+    axis.title = element_text(size = 16),  # Larger axis titles
+    plot.title = element_text(size = 16, hjust = 0.5), # Larger plot title
+    panel.grid = element_blank(),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.line = element_line(color = "black")
+  )
+
+ggsave(filename = "../methods/plots/colony_fecundity_family.pdf", 
+       plot = f2, 
+       width = 20, height = 7, units = "in")
+```
+
+```{r,echo=FALSE, message=FALSE, error=FALSE, warning=FALSE, fig.width=15, fig.height=8}
+
+# Prepare data for plotting
+indopacific_plot_data <- indo_pacific_data %>%
+  group_by(family_molecules, Genus) %>%
+  summarise(mean_fecundity = median(Fecundity_Value, na.rm = TRUE), .groups = "drop") %>%
+  arrange(family_molecules, desc(mean_fecundity)) %>%
+  distinct(Genus, .keep_all = TRUE)  # Ensure unique Genus values
+
+# Create shading data for family molecules
+shading_data <- indopacific_plot_data %>%
+  group_by(family_molecules) %>%
+  summarise(
+    xmin = min(as.numeric(Genus)),
+    xmax = max(as.numeric(Genus)),
+    .groups = "drop"
+  )
+
+# Reorder Fecundity_Type for grouping
+indo_pacific_data <- indo_pacific_data %>%
+  mutate(
+    Genus = factor(Genus, levels = unique(indopacific_plot_data$Genus)),
+    family_molecules = factor(family_molecules, levels = unique(indopacific_plot_data$family_molecules))
+  )
+
+f3<- ggplot(indo_pacific_data, aes(x = Genus, y = Fecundity_Value)) +
+  # Add shaded background rectangles
+  geom_rect(data = shading_data, aes(xmin = xmin - 0.3, xmax = xmax + 0.3, ymin = 0, ymax = 1e+22, fill = family_molecules),
+            inherit.aes = FALSE, alpha = 0.2) +
+  # Add boxplot
+  geom_boxplot(aes(fill = family_molecules), alpha = 0.7, outlier.shape = NA) +
+  # Add jittered points
+  geom_jitter(aes(fill = family_molecules), shape = 21, size = 2, width = 0.2) +
+  scale_fill_manual(values = family_colors_vector) +
+  labs(
+    x = NULL,
+    y = expression("Log total mean fecundity per" *km^2* ""),
+    fill = "Family Molecule"
+  ) +
+  annotate("text", x = -Inf, y = Inf, label = "C", hjust = -0.5, vjust = 1, size = 8, fontface = "bold")+
+  scale_y_log10()+
+   theme(
+    legend.position = "none",
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 14),  # Larger x-axis labels
+    axis.text.y = element_text(size = 14),        # Larger y-axis labels
+    axis.title = element_text(size = 16),  # Larger axis titles
+    plot.title = element_text(size = 16, hjust = 0.5), # Larger plot title
+    panel.grid = element_blank(),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.line = element_line(color = "black")
+  )
+
+ggsave(filename = "../methods/plots/indopacific_fecundity_family.pdf", 
+       plot = f3, 
+       width = 20, height = 7, units = "in")
+
+```

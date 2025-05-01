@@ -1,0 +1,61 @@
+---
+title: "03_imputation"
+output: html_document
+date: "2025-04-28"
+---
+
+Purpose: To run imputation on all missing values for the species 
+
+Inputs 
+funspacedata.csv - the data that has been cleaned for missForest 
+
+Outputs 
+imputedtraitdata.csv - overall imputed traits 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(dplyr)
+library(tidyr)
+library(funspace)
+library(missForest)
+library(caret)
+```
+
+Load and clean the data 
+```{r}
+coral_data <- read.csv("../methods/funspacedata.csv")
+
+coral_data <- coral_data %>%
+  dplyr::select(-X)
+
+coral_data <- coral_data %>% dplyr::select(Species, GrowthForm_CTD, Abund_CTD, ReefArea_Range, family_molecules, family_morphology, larval, Abundance_GBR, Abundance_world, Depth_lower, Depth_upper, Growth_form_typical, Oocyte_size_at_maturity, Wave_exposure_preference, Polyp_fecundity, Polyps_per_area, Colony_maximum_diameter, Corallite_width_maximum, Corallite_width_minimum, Growth_form_Wallace, Growth_rate, Colony_area, Polyps_per_area, Size_at_maturity, Eggs_per_area, Colony_surface_area, MeanPCcover)
+```
+
+Get rid of any categorical identifiers
+```{r}
+
+# Convert character columns to factors
+coral_data <- coral_data %>%
+  mutate(across(where(is.character), as.factor))
+
+# Define categorical identifiers
+
+# Define categorical identifiers
+categorical_identifiers <- c("Species", "GrowthForm_CTD", "Abund_CTD","family_molecules", "family_morphology", "larval", "Abundance_GBR", "Abundance_world","Growth_form_typical","Wave_exposure_preference", "Growth_form_Wallace", "MeanPCcover")
+
+
+# Exclude the categorical identifiers for imputation
+traits_to_impute <- coral_data %>%
+  dplyr::select(-all_of(categorical_identifiers))
+```
+
+Run the imputation
+```{r}
+# Impute missing values using missForest
+imputed_traits <- missForest(traits_to_impute)$ximp
+
+coral_data_imputed <- cbind(coral_data[, categorical_identifiers], imputed_traits)
+
+write.csv(coral_data_imputed, file="../methods/imputedtraitdata.csv", row.names = TRUE)
+```
