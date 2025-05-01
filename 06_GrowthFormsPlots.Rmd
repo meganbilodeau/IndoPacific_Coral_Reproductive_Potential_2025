@@ -25,7 +25,7 @@ library(purrr)
 ```
 
 ```{r}
-imputed <- read_csv(file = "imputed_fecundity.csv")
+imputed <- read_csv(file = "data/imputed_fecundity.csv")
 
 imputed_long <- imputed %>%
   dplyr::select(Species, Genus, family_molecules, GrowthForm_CTD, fecundity, Colony_fecundity, IndoPacific_fecundity) %>%
@@ -118,12 +118,10 @@ genus <- ggplot(imputed, aes(x = fecundity, y = IndoPacific_fecundity, color = G
     fontface = "bold"
   ) +
   facet_wrap(~GrowthForm)
-
-ggsave(filename = "../methods/plots/genus_fecundity_comparison.pdf", 
-       plot = genus, 
-       width = 20, height = 10, units = "in")
-
 ```
+
+
+
 ```{r}
 
 imputed_growthform <- imputed %>%
@@ -351,9 +349,5 @@ p3 <- ggplot(indo_pacific_data_prop, aes(x = Fecundity_Type, y = Proportion, fil
 # Arrange them side by side
 final_plot <- (p1 | p2 | p3)  # Using `|` for horizontal alignment
 final_plot
-
-ggsave(filename = "../methods/plots/growthform_fecundity.pdf", 
-       plot = final_plot, 
-       width = 20, height = 10, units = "in")
 
 ```
