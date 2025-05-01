@@ -24,7 +24,7 @@ library(caret)
 
 Load and clean the data 
 ```{r}
-coral_data <- read.csv("../methods/funspacedata.csv")
+coral_data <- read.csv("data/funspacedata.csv")
 
 coral_data <- coral_data %>%
   dplyr::select(-X)
@@ -57,5 +57,5 @@ imputed_traits <- missForest(traits_to_impute)$ximp
 
 coral_data_imputed <- cbind(coral_data[, categorical_identifiers], imputed_traits)
 
-write.csv(coral_data_imputed, file="../methods/imputedtraitdata.csv", row.names = TRUE)
+write.csv(coral_data_imputed, file="data/imputedtraitdata.csv", row.names = TRUE)
 ```
