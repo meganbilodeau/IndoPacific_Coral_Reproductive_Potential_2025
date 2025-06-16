@@ -1,0 +1,161 @@
+---
+title: "01_DataAquisition"
+output: html_document
+date: "2025-04-28"
+---
+
+Purpose: To filter the data and put together the files for imputation by funspace
+
+Inputs: 
+RData/Input_Files.RData - from Dietzel data 
+coral_popsize.xlsx - from Dietzel supplementary data 
+ctdb_1.1.1_data.csv - downloaded data from coral traits database 
+coral_traits_raw.csv - recent 2025 download of the coral traits 
+
+Outputs:
+funspacedata_v2.csv - file with the mean traits of the corals with data in coral traits database matched to the support data from Dietzel
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(readxl)
+library(dplyr)
+library(tidyverse)
+```
+
+```{r}
+#load("../R_code_litreview_sem12024/R code Dietzel et al/RData/Input_Files.RData")
+
+### Support Data Saved 
+coral <- read_csv("../R_code_litreview_sem12024/coraldata.csv")
+```
+
+```{r}
+file_path <- "../R_code_litreview_sem12024/coral_popsize.xlsx"
+
+# Read the names of all sheets in the Excel file
+sheet_names <- excel_sheets(file_path)
+print(sheet_names)  # Print the names of the sheets
+
+# Read each sheet into a list of data frames
+data_list <- lapply(sheet_names, function(sheet) {
+  read_excel(file_path, sheet = sheet)
+})
+
+# Optionally, name the list elements after the sheet names
+names(data_list) <- sheet_names
+
+# Access individual data frames by sheet name
+species_abundance <- data_list[["Species abundances"]]
+population_sizes <- data_list[["Population sizes"]]
+habitat_maps <- data_list[["Reef habitat maps"]]
+
+coraldata <- merge(coral, population_sizes, by = "Species")
+
+coraldata <- coraldata%>%
+  dplyr::select(Species, GrowthForm_CTD, Abund_CTD, MeanPCcover, family_molecules, family_morphology, larval)
+  
+```
+
+coraltraits data 
+```{r}
+coraltraits_download <- read_csv("../methods/ctdb_1.1.1_data.csv")
+
+coraltraits_download <- coraltraits_download %>%
+  rename(Species = specie_name)
+
+coraltraits_raw <- read_csv("../R_code_litreview_sem12024/coral_traits_raw.csv")
+
+coraltraits_raw <- coraltraits_raw %>%
+  rename(Species = specie_name)
+
+##Making conversions for standard units 
+relevant_traits <- c("Growth rate", "Colony fecundity", "Colony area", 
+                     "Polyps per area", "Polyp fecundity", "Eggs per area", 
+                     "Colony maximum diameter", "Corallite width minimum", 
+                     "Corallite width maximum")
+
+filtered_data <- coraltraits_raw %>%
+  filter(trait_name %in% relevant_traits)
+
+filtered_data_hardcoral <- subset(filtered_data, subclass != "Octocorallia")
+
+unit_summary <- filtered_data_hardcoral %>%
+  group_by(trait_name) %>%
+  summarise(units = paste(unique(standard_unit), collapse = ", "))
+
+combined_traits <- bind_rows(filtered_data_hardcoral, coraltraits_download) %>%
+  distinct()
+
+combined_traits <- combined_traits%>%
+  dplyr::select(Species, trait_name, value, observation_id)%>%
+  distinct()%>%
+  dplyr::select(-observation_id)
+
+combined_traits$Numeric_Value <- as.numeric(as.character(combined_traits$value))
+
+combined_traits_num <- combined_traits%>%
+  filter(!is.na(Numeric_Value))%>%
+  dplyr::select(-value)
+
+mean_traits <- combined_traits_num%>%
+  group_by(Species, trait_name)%>%
+  mutate(Meanvalue = mean(Numeric_Value))%>%
+  dplyr::select(-Numeric_Value)%>%
+  distinct()
+
+data_wide <- mean_traits %>%
+  pivot_wider(names_from = trait_name, values_from = Meanvalue)
+
+names(data_wide) <- gsub(" ", "_", names(data_wide))
+
+data_wide <- data_wide%>%
+  dplyr::select("Species", "Growth_rate", "Colony_fecundity","Colony_area", "Polyps_per_area", "Polyp_fecundity", "Eggs_per_area","Colony_maximum_diameter","Corallite_width_minimum", "Corallite_width_maximum")
+
+funspace_data <- left_join(data_wide, coraldata, by = "Species")
+
+write_csv(funspace_data, "../methods/funspacedata_v2.csv")
+```
+
+```
+polyp <-data_wide%>%
+  filter(!is.na(Polyp_fecundity))
+
+area <-data_wide%>%
+  filter(!is.na(Colony_area))
+
+# Combine the three datasets
+combined_data <- bind_rows(need, polyp, area)
+
+# Remove duplicate rows
+combined_data_unique <- combined_data %>%
+  distinct()
+
+# View result
+combined_data_unique
+
+
+write_csv(combined_data_unique, "../methods/funspacedata_v2.csv")
+```
+
+Determining number of entries for each trait 
+```{r}
+n_traits_combined <- filtered_data_hardcoral %>%
+  dplyr::select(Species, trait_name, value) %>%
+  group_by(trait_name) %>%
+  summarise(
+    n_entries = n(),                         # Total number of entries
+    n_unique_species = n_distinct(Species)   # Unique species per trait
+  )%>%
+  filter(trait_name %in% c("Colony area", "Colony fecundity", "Polyp fecundity", "Polyps per area", "Eggs per area"))
+
+n_traits_combined <- filtered_data %>%
+  dplyr::select(Species, trait_name, value) %>%
+  group_by(trait_name) %>%
+  summarise(
+    n_entries = n(),                         # Total number of entries
+    n_unique_species = n_distinct(Species)   # Unique species per trait
+  )%>%
+  filter(trait_name %in% c("Colony area", "Colony fecundity", "Polyp fecundity", "Polyps per area", "Eggs per area"))
+```

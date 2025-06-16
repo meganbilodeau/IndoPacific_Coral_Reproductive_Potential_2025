@@ -1,0 +1,137 @@
+---
+title: "04_DataChecking"
+output: html_document
+date: "2025-04-28"
+---
+
+Purpose: Compare the values imputed with the original observed values 
+
+Inputs 
+imputedtraitdata.csv - imputed traits 
+funspacedata.csv - observed traits
+Indo_Pacific_data.rds - area for the indopacific regions 
+
+
+Outputs 
+imputed_fecundity.csv - imputed traits and calculated fecundity levels (eggs per area - fecundity, eggs per average colony area - colony_fecundity, eggs total across the indo-pacific area - indo-pacific_fecundity)
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(readxl)
+library(dplyr)
+library(tidyverse)
+library(caret)
+library(RColorBrewer)
+library(ggbiplot)
+library(viridis)
+```
+
+Only 3 species for colony area does not seem right, trying to upload the data directly from coral trait database, but otherwise will use the current data and the transformed data for fecundity values 
+
+## Q-Q plot 
+
+Q-Q Plot: Here, Imputed values are plotted as sample quantiles, and Original values are used for the reference line.
+```{r}
+
+coral_data_imputed <- read.csv(file="../methods/imputedtraitdata_v2.csv")
+
+coral_data_original <- read.csv(file="../methods/originaltraitdata_v2.csv")
+
+
+ppa_combined <- data.frame(
+  Imputed = coral_data_imputed$Polyps_per_area,
+  Original = coral_data_original$Polyps_per_area
+)
+
+ppaQQ <- ggplot(ppa_combined, aes(sample = Imputed)) +
+  stat_qq() +
+  stat_qq_line(aes(sample = Original), color = "red") +
+  labs(title = "Q-Q Plot for Polyps per Area (Imputed Values with Measured Line)",
+       x = "Theoretical Quantiles (Measured Values)",
+       y = "Sample Quantiles (Imputed Values)") +
+  theme_minimal()
+
+ggsave(filename = "../methods/plots/polyp_per_area_QQplot.pdf", 
+       plot = ppaQQ, 
+       width = 20, height = 7, units = "in")
+
+# 1:1 Plot for Polyps per Area
+ppa_1to1 <- ggplot(ppa_combined, aes(x = Original, y = Imputed)) +
+  geom_point(color = "blue", alpha = 0.6) +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "1:1 Plot for Polyps per Area (Imputed Values)",
+       x = "Measured Values",
+       y = "Imputed Values") +
+  theme_minimal() +
+  coord_equal()
+
+ggsave(filename = "../methods/plots/1to1_polyp_per_area.pdf", 
+       plot = ppa_1to1, 
+       width = 20, height = 7, units = "in")
+
+ca_combined <- data.frame(
+  Imputed = coral_data_imputed$Colony_area,
+  Original = coral_data_original$Colony_area
+)
+
+# Q-Q Plot for Colony.area (Imputed values plotted, measured as reference line)
+ca_qq <- ggplot(ca_combined, aes(sample = Imputed)) +
+  stat_qq() +
+  stat_qq_line(aes(sample = Original), color = "red") +
+  labs(title = "Q-Q Plot for Colony Area (Imputed Values with Measured Line)",
+       x = "Theoretical Quantiles (Measured Values)",
+       y = "Sample Quantiles (Imputed Values)") +
+  theme_minimal()
+
+ggsave(filename = "../methods/plots/colony_area_QQplot.pdf", 
+       plot = ca_qq, 
+       width = 20, height = 7, units = "in")
+
+# 1:1 Plot for Colony Area
+ca_1to1 <- ggplot(ca_combined, aes(x = Original, y = Imputed)) +
+  geom_point(color = "blue", alpha = 0.6) +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "1:1 Plot for Colony Area (Imputed Values)",
+       x = "Measured Values",
+       y = "Imputed Values") +
+  theme_minimal() +
+  coord_equal()
+
+ggsave(filename = "../methods/plots/colony_area.pdf", 
+       plot = ca_1to1, 
+       width = 20, height = 7, units = "in")
+```
+
+## Get fecundity per cm^2 multiply polyp per area and colony area (planar area) 
+
+plot fecundity as genus or another option 
+Fecundity -> per cm^2
+
+Calculating fecundity values for colony fecundity and indopacific fecundity 
+```{r}
+#fecundity 
+
+coral_data_imputed$fecundity <- (coral_data_imputed$Polyps_per_area * coral_data_imputed$Polyp_fecundity)
+
+#colony.fecundity
+coral_data_imputed$Colony_fecundity <- (coral_data_imputed$fecundity * coral_data_imputed$Colony_area)
+
+#East Asia: 78,272 km2
+#Australia: 41,802 km2
+#Pacific: 69,424 km2
+
+Indo_Pacific <- readRDS(file="../R_code_litreview_sem12024/Indo_Pacific_data.rds")
+coral_data_imputed$coralcover <- ((coral_data_imputed$MeanPCcover/100) * (78272 + 41802 + 69424))
+
+coral_data_imputed$IndoPacific_fecundity = (coral_data_imputed$coralcover * coral_data_imputed$fecundity *1e10)
+
+coral_data_imputed <- coral_data_imputed %>%
+  mutate(Genus = sapply(strsplit(Species, " "), `[`, 1))
+
+coral_data_imputed <- coral_data_imputed%>%
+  filter(!is.na(coralcover))
+
+write.csv(coral_data_imputed, file = "imputed_fecundity_v3.csv")
+```

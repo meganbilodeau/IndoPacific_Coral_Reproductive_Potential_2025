@@ -1,0 +1,160 @@
+---
+title: "09_v1_Statistics"
+output: html_document
+date: "2025-06-12"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+Genus Loading the data 
+```{r}
+imputed <- read_csv(file = "imputed_fecundity_v3.csv")
+
+fecundity_proportions <- imputed %>%
+  mutate(proportions = fecundity / sum(fecundity),
+         Fecundity_Type = "Polyp_fecundity") %>%
+  select(Species, Genus, fecundity, Fecundity_Type, proportions)
+
+colony_proportions <- imputed %>%
+  mutate(proportions = Colony_fecundity / sum(Colony_fecundity),
+         Fecundity_Type = "Colony_fecundity") %>%
+  select(Species, Genus, Colony_fecundity, Fecundity_Type, proportions)
+
+indo_pacific_proportions <- imputed %>%
+  mutate(proportions = IndoPacific_fecundity / sum(IndoPacific_fecundity),
+         Fecundity_Type = "IndoPacific_fecundity") %>%
+  select(Species, Genus, IndoPacific_fecundity, Fecundity_Type, proportions)
+
+fecundity_all <- bind_rows(
+  fecundity_proportions,
+  colony_proportions,
+  indo_pacific_proportions
+)
+
+```
+
+Genus Level Fecundity Values 
+```{r}
+#fecundity_proportions
+#colony_proportions
+#indo_pacific_proportions
+
+fecund_prop_model <- aov(fecundity ~ Genus, data = fecundity_proportions)
+print(summary(fecund_prop_model))
+
+
+colony_fecund_prop_model <- aov(Colony_fecundity ~ Genus, data = colony_proportions)
+print(summary(colony_fecund_prop_model))
+
+
+indo_fecund_prop_model <- aov(IndoPacific_fecundity ~ Genus, data = indo_pacific_proportions)
+print(summary(indo_fecund_prop_model))
+
+anova_model <- aov(proportions ~ Genus * Fecundity_Type, data = fecundity_all)
+summary(anova_model)
+
+```
+
+
+Genus Level Proportions btw fecundity scales 
+```{r}
+fecundity_proportions <- imputed %>%
+  group_by(Genus)%>%
+  mutate(fecund_genus = sum(fecundity),
+         Fecundity_Type = "Fecundity")%>%
+  select(Genus, Fecundity_Type, fecund_genus)%>%
+  unique()%>%
+  ungroup()%>%
+  mutate(proportions = fecund_genus / sum(fecund_genus))
+
+colony_proportions <- imputed %>%
+  group_by(Genus)%>%
+  mutate(colony_genus = sum(Colony_fecundity),
+         Fecundity_Type = "Colony_fecundity")%>%
+  select(Genus, Fecundity_Type, colony_genus)%>%
+  unique()%>%
+  ungroup()%>%
+  mutate(proportions = colony_genus / sum(colony_genus))
+
+indo_pacific_proportions <- imputed %>%
+  group_by(Genus)%>%
+  mutate(indo_fecund_genus = sum(IndoPacific_fecundity),
+         Fecundity_Type = "IndoPacific_fecundity")%>%
+  select(Genus, Fecundity_Type, indo_fecund_genus)%>%
+  unique()%>%
+  ungroup()%>%
+  mutate(proportions = indo_fecund_genus / sum(indo_fecund_genus))
+
+fecundity_all <- bind_rows(
+  fecundity_proportions,
+  colony_proportions,
+  indo_pacific_proportions
+)
+
+fecund_prop_model <- aov(proportions ~ Genus, data = fecundity_proportions)
+
+print(summary(fecund_prop_model))
+
+
+colony_fecund_prop_model <- aov(proportions ~ Genus, data = colony_proportions)
+
+print(summary(colony_fecund_prop_model))
+
+
+indo_fecund_prop_model <- aov(proportions ~ Genus, data = indo_pacific_proportions)
+
+print(summary(indo_fecund_prop_model))
+
+anova_model <- aov(proportions ~ Genus * Fecundity_Type, data = fecundity_all)
+summary(anova_model)
+
+```
+Growth Form Data Load
+```{r}
+imputed <- read_csv(file = "imputed_fecundity_v3.csv")
+
+fecundity_proportions <- imputed %>%
+  mutate(proportions = fecundity / sum(fecundity),
+         Fecundity_Type = "Polyp_fecundity") %>%
+  select(Species, GrowthForm_CTD, fecundity, Fecundity_Type, proportions)
+
+colony_proportions <- imputed %>%
+  mutate(proportions = Colony_fecundity / sum(Colony_fecundity),
+         Fecundity_Type = "Colony_fecundity") %>%
+  select(Species, GrowthForm_CTD, Colony_fecundity, Fecundity_Type, proportions)
+
+indo_pacific_proportions <- imputed %>%
+  mutate(proportions = IndoPacific_fecundity / sum(IndoPacific_fecundity),
+         Fecundity_Type = "IndoPacific_fecundity") %>%
+  select(Species, GrowthForm_CTD, IndoPacific_fecundity, Fecundity_Type, proportions)
+
+fecundity_all <- bind_rows(
+  fecundity_proportions,
+  colony_proportions,
+  indo_pacific_proportions
+)
+```
+
+
+Growth Form Levels 
+```{r}
+fecund_prop_model <- aov(fecundity ~ GrowthForm_CTD, data = fecundity_proportions)
+print(summary(fecund_prop_model))
+
+
+colony_fecund_prop_model <- aov(Colony_fecundity ~ GrowthForm_CTD, data = colony_proportions)
+print(summary(colony_fecund_prop_model))
+
+
+indo_fecund_prop_model <- aov(IndoPacific_fecundity ~ GrowthForm_CTD, data = indo_pacific_proportions)
+print(summary(indo_fecund_prop_model))
+
+anova_model <- aov(proportions ~ GrowthForm_CTD * Fecundity_Type, data = fecundity_all)
+summary(anova_model)
+
+```
+
+

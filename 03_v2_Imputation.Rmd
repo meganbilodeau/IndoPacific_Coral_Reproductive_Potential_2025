@@ -1,0 +1,66 @@
+---
+title: "03_imputation"
+output: html_document
+date: "2025-04-28"
+---
+
+Purpose: To run imputation on all missing values for the species 
+
+Inputs 
+funspacedata_v2.csv - the data that has been cleaned for missForest 
+
+Outputs 
+imputedtraitdata_v2.csv - overall imputed traits 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(dplyr)
+library(tidyr)
+library(funspace)
+library(missForest)
+library(caret)
+```
+
+Load and clean the data 
+```{r}
+coral_data <- read.csv("../methods/funspacedata_v2.csv")
+```
+
+Get rid of any categorical identifiers
+```{r}
+
+# Convert character columns to factors
+coral_data <- coral_data %>%
+  mutate(across(where(is.character), as.factor))
+
+# Define categorical identifiers
+
+# Define categorical identifiers
+categorical_identifiers <- c("Species", "GrowthForm_CTD", "Abund_CTD","family_molecules", "family_morphology", "larval", "MeanPCcover")
+
+
+# Exclude the categorical identifiers for imputation
+traits_to_impute <- coral_data %>%
+  dplyr::select(-all_of(categorical_identifiers))
+```
+
+Run the imputation
+```{r}
+# Impute missing values using missForest
+imputed_traits <- impute(traits_to_impute)
+
+# Extract imputed traits
+traits_imputed_df <- imputed_traits[[1]]
+
+coral_data_imputed <- cbind(coral_data[, categorical_identifiers], traits_imputed_df)
+
+# Extract original traits (before imputation)
+traits_original_df <- imputed_traits[[2]]
+
+original_coral_data <- cbind(coral_data[, categorical_identifiers], traits_original_df)
+
+write.csv(coral_data_imputed, file="../methods/imputedtraitdata_v2.csv", row.names = TRUE)
+
+write.csv(original_coral_data, file="../methods/originaltraitdata_v2.csv", row.names = TRUE)
+```
